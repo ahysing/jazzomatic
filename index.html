@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="description" content="jazzomatic is a program to create awsome jazz jams.">
+        <meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1, maximum-scale=1">
+        <meta id="theme-color" name="theme-color" content="#ffffff">
+        <link rel="icon" sizes="192x192" href="static/icon-192x192.png">
+        <title>jazzomatic</title>
+        <style>
+            body {
+                background: black;
+            }
+
+            .hidden {
+                display: none;
+            }
+
+            .tooltip {
+                background-color: rgb(236, 72, 72);
+                color: white;
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 1em;
+                font-weight: bold;
+                border-radius: 10px;
+                padding: 20px;
+                margin: 10px;
+            }
+
+            .stopped-hidden, .playing-hidden {
+                display: none;
+            }
+
+            /* first pass. this is the input signal */ 
+            .source-video {
+                display: none;
+            }
+            /* This is where we take the signal and manipulate it */
+            .back-buffer {
+                display: none;
+            }
+
+            /* Final stage. This is where we show the signal to the user */
+            .on-screen {
+                display: none;
+            }
+
+            #debug-mixers{
+               padding: 1em; 
+            }
+            .inline-mixer {
+                display: inline-block;
+            }
+            .beat-mixer {
+                width: 150px;
+                height: 150px;
+                background-color: darkred;
+            }
+            .in-beat { 
+                background-color: white;   
+            }
+        </style>
+    </head>
+    <body>
+        <aside>
+            <select id="music-picker">
+                <option value="track%201.mp3" selected>track 1</option>
+                <option value="track%202.mp3" >track 2</option>
+                <option value="track%203.mp3" >track 3</option>
+            </select>
+            <div class="controls">
+                <button title="Stop" id="stop-button"><span id="record-icon" class="">⏺</span><span id="pause-icon" class="stopped-hidden">⏸️</span></button>
+                <button title="Replay" id="replay-button"><span id="replay-icon">↩️</span></button>
+            </div>
+        </aside>
+        <main id="container">
+            <audio id="on-speaker" crossorigin="anonymous">
+                <source src="static/tracks/track%201.mp3" type="audio/mp3">
+            </audio>
+
+
+            <video id="source-video" playsinline autoplay class="source-video"></video>
+            <canvas id="back-buffer" class="back-buffer" width="1" height="1"></canvas>
+            <video id="on-screen" controls playsinline poster="static/poster.jpg">
+                Sorry. Your browser doesn't support videos.
+            </video>
+            
+            <div id="debug-mixers" class="mixers hidden">
+                <canvas id="bpm-mixer" width="670" height="150" class="inline-mixer"></canvas><div id="beat-mixer" class="beat-mixer inline-mixer"></div>
+                <canvas id="vocal-detecter-mixer" width="820" height="150"></canvas>
+            </div>
+
+            <noscript>
+                <div class="tooltip">
+                This page only works with javascript enabled. We are not able to run properly
+                </div>
+            </noscript>
+            <div id="error-box" class="tooltip hidden"></div>
+            <script type="text/javascript" src="static/js/audio.js"></script>
+            <script type="text/javascript" src="static/js/video.js"></script>
+            <script type="text/javascript">
+            'use strict';
+
+            /* Start of web Audio functions */
+            const global = {
+                analyser: null,
+                audioCtx: null,
+                sampleCallback: 0,
+                frequencyData: new Uint8Array(512),
+                domainData: new Uint8Array(512)
+            };
+
+            function createFFTAnalyserFromSource(element) {
+                // const AC = new AudioContext || window.AudioContext || window.webkitAudioContext);
+                global.audioCtx = new AudioContext();
+                
+                const source = global.audioCtx.createMediaElementSource(element);
+                const analyser = global.audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                source.connect(analyser);
+                
+                if (analyser.frequencyBinCount != global.frequencyData.length) {
+                    global.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+                }
+
+                global.analyser = analyser;
+                startSampleLoop(global.analyser);
+            }
+
+            function installAnalyser(element) {
+                createFFTAnalyserFromSource(element);
+            }
+
+            function handleSample() {
+                var iterator = 0;
+                while (!navigator.serviceWorker && iterator++ < 100) {
+                    console.log('waiting for serviceWorker to spawn');
+                }
+
+                while (!navigator.serviceWorker.controller && iterator++ < 100) {
+                    console.log('waiting for serviceWorker to get activated');
+                }
+
+                function isNotSilent(dataArray) {
+                    function isZero(value, index, array) {
+                        return value === 0;
+                    }
+
+                    return dataArray.length > 0 && dataArray.every(isZero) === false;
+                }
+                if (iterator < 100) {
+                    global.analyser.getByteFrequencyData(global.frequencyData);
+                    global.analyser.getByteTimeDomainData(global.domainData);
+                    if (isNotSilent(global.frequencyData) && isNotSilent(global.domainData)) {
+                        var outputTimestamp;
+                        if (global.audioCtx && global.audioCtx.getOutputTimestamp) {
+                            outputTimestamp = global.audioCtx.getOutputTimestamp();
+                        }
+
+                        navigator.serviceWorker.controller.postMessage({'command': 'sample', 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'outputTimestamp': outputTimestamp});
+                    }
+                } else {
+                    console.error('Sample dropped');
+                }
+            }
+
+            function startSampleLoop(analyser) {
+                if (global.sampleCallback !== 0) {
+                    stopSampleLoop();
+                }
+                const timeoutPrecise = (1000.0 / analyser.sampleRate);
+                const timoeut = Math.trunc(timeoutPrecise);
+                global.sampleCallback = setInterval(handleSample, timoeut);
+            }
+
+            function stopSampleLoop() {
+                clearInterval(global.sampleCallback);
+            }
+            /* End of web Audio functions */
+
+
+            var frameId = -1;
+            function bindCameraToBackgroundBuffer(stream) {
+                const backgroundBuffer = document.getElementById('back-buffer');
+                const canvasContext = backgroundBuffer.getContext('2d');
+                //const canvasContext = backgroundBuffer.getContext('webgl2');
+                if (canvasContext === null) {
+                    displayGlError();
+                    return;
+                }
+                const vTracks = stream.getVideoTracks();
+                if (vTracks.length) {
+                    var width = 0;
+                    var height = 0;
+                    for (var i = 0; i < vTracks.length; i++) {
+                        const firstVideo = vTracks[i];
+                        const videoSettings = firstVideo.getSettings();
+                        if (videoSettings.width > width) width = videoSettings.width;
+                        if (videoSettings.height > height) height = videoSettings.height;
+                    }
+
+                    canvasContext.width = width;
+                    canvasContext.height = height;
+                    backgroundBuffer.width = width;
+                    backgroundBuffer.height = height;
+                }
+/*
+                canvasContext.clearColor(1.0, 0.0, 0.0, 1.0);
+                canvasContext.clear(canvasContext.COLOR_BUFFER_BIT);
+                const texture = canvasContext.createTexture();
+                canvasContext.bindTexture(canvasContext.TEXTURE_2D, texture);
+*/
+                const sourceVideo = document.getElementById("source-video");
+                sourceVideo.srcObject = stream;
+
+                const videoOnScreen = document.getElementById("on-screen");
+                videoOnScreen.srcObject = backgroundBuffer.captureStream();
+                //videoOnScreen.srcObject = stream;
+
+                function draw() {
+                    const backgroundBuffer = document.getElementById('back-buffer');
+                    const canvasContext = backgroundBuffer.getContext('2d');
+                    canvasContext.drawImage(sourceVideo, 0, 0, width, height);
+                    
+                    window.requestAnimationFrame(draw);
+                };
+
+                window.requestAnimationFrame(draw);
+            }
+            
+            function showErrorTip(message) {
+                const eb = document.getElementById("error-box");
+                eb.innerText += message;
+                eb.classList.remove("hidden");
+            
+            }
+            function displayGlError() {
+                showErrorTip("Unable to turn on effects. Your device is not supported.");
+            }
+
+            function noSuchCamera(err) {
+                showErrorTip("trying to access your camera. please reload the page and give the web page web cam access next time.");
+            }
+
+            function showCameraNotSupported(err) {
+                showErrorTip("Web cams are not supported!");
+            }
+
+            function handleAudioMessage(event) {
+                console.log("Main thread got", event);
+                if (event.data.command === "BPM")
+                {
+                    console.log("BPM", evt.data.BPM);
+                    const audio = document.getElementById("on-speaker");
+                    const mixer = document.getElementById("bpm-mixer");
+                    if (audio.duration != NaN) {
+                        // TODO
+                    }
+                } else if (event.data.command == "beat") {
+                    console.log("beat", evt.data.beat);
+                    
+                    var beatMixer = document.getElementById("beat-mixer");
+                    beatMixer.classList.add("in-beat");
+                    setTimeout(function() {
+                        document.getElementById("beat-mixer").classList.remove("in-beat");
+                    }, 100);
+                }
+            };
+
+            let worker = null;
+            function startAudioThread() {
+                navigator.serviceWorker.register('/audio-analysis-worker.js', {
+                    scope: '/'
+                }).then(function (registration) {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);   
+                    while (!navigator.serviceWorker) {
+                        console.log('waiting for serviceWorker to spawn');
+                    }
+
+                    while (!navigator.serviceWorker.controller) {
+                        console.log('waiting for serviceWorker to get activated');
+                    }
+                    
+                    const worker = navigator.serviceWorker.controller;
+                    worker.postMessage({'command': 'registerControllerThread'});
+                }).catch (function (error) {
+                    // Something went wrong during registration. The service-worker.js file
+                    // might be unavailable or contain a syntax error.
+                    console.log('ServiceWorker registration failed: ', error.message);
+                });
+
+
+                var audio = document.getElementById('on-speaker');
+                installAnalyser(audio);
+            }
+
+            function playTrack() {
+                const videoOnScreen = document.getElementById("on-screen");
+                videoOnScreen.removeAttribute("poster");
+                const onSpeaker = document.getElementById("on-speaker");
+                
+                startSampleLoop(global.analyser);
+                onSpeaker.play();
+                if (global.audioCtx !== null) {
+                    global.audioCtx.resume();
+                }
+            }
+
+            function stopTrack() {
+                document.getElementById("on-speaker").pause();
+                stopSampleLoop();
+                if (global.audioCtx !== null) {
+                    global.audioCtx.suspend();
+                }
+            }
+
+            function playControls() {
+                document.getElementById("record-icon").classList.add("playing-hidden");
+                document.getElementById("pause-icon").classList.remove("stopped-hidden");        
+            }
+
+            function stopControls() {
+                document.getElementById("record-icon").classList.remove("playing-hidden");
+                document.getElementById("pause-icon").classList.add("stopped-hidden");    
+            }
+
+            function wireButtonPanel() {
+                var modeStopped = true;
+                function toggleStopStart(stopStart) {
+                    if (modeStopped) {
+                        // stopped
+                        playControls();
+                        playTrack();
+                    } else {
+                        // playing
+                        stopControls();
+                        stopTrack();
+                    }
+
+                    modeStopped = !modeStopped;
+                }
+
+                function toggleReplay(replay) {
+                    const onSpeaker = document.getElementById("on-speaker");
+                    onSpeaker.currentTime = 0;
+                }
+
+                document.getElementById("stop-button").addEventListener('click', toggleStopStart);
+                document.getElementById("replay-button").addEventListener('click', toggleReplay);
+            }
+
+            function wireDebugMixers() {
+                var mixer = document.getElementById("bpm-mixer");
+                var ctx = mixer.getContext("2d");
+                ctx.fillStyle = "red";
+                ctx.fillRect(0, 0, mixer.width, mixer.height);
+
+                var vocal = document.getElementById("vocal-detecter-mixer");
+                var vCtx = vocal.getContext("2d");
+                vCtx.fillStyle = "green";
+                vCtx.fillRect(0, 0, vocal.width, vocal.height);
+            }
+
+            function wireMediaControls() {
+                document.getElementById("on-screen").addEventListener("pause", stopTrack);
+                document.getElementById("on-screen").addEventListener("play", playTrack);            
+            }
+
+            function wireCam() {
+                const deviceRequirementsCamera = { video: true };
+                if (navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia(deviceRequirementsCamera)
+                        .then(bindCameraToBackgroundBuffer)
+                        .catch(noSuchCamera);
+                } else {
+                    showCameraNotSupported();
+                }
+            }
+            //
+            // creates a shader of the given type, uploads the source and
+            // compiles it.
+            //
+            function loadShader(gl, type, source) {
+                const shader = gl.createShader(type);
+                // Send the source to the shader object
+                gl.shaderSource(shader, source);
+                // Compile the shader program
+                gl.compileShader(shader);
+                // See if it compiled successfully
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    showErrorTip('An error occurred compiling shader: ' + gl.getShaderInfoLog(shader));
+                    gl.deleteShader(shader);
+                    return null;
+                }
+
+                return shader;
+            }
+
+            function initShaderProgram(context, vertexSrc, fragmentSrc) {
+                const vertexShader = loadShader(context, context.VERTEX_SHADER, vertexSrc);
+                const fragmentShader = loadShader(context, context.FRAGMENT_SHADER, fragmentSrc);
+                const shaderProgram = context.createProgram();
+                context.attachShader(shaderProgram, vertexShader);
+                context.attachShader(shaderProgram, fragmentShader);
+                context.linkProgram();
+                // See if it compiled successfully
+                if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                    showErrorTip('An error occurred compiling shader: ' + gl.getProgramInfoLog(shaderProgram));
+                    gl.deleteShader(shader);
+                    return null;
+                }
+
+                return shaderProgram;
+            }
+
+            function setupShaders(context) {
+                const vertexSrc = document.getElementById('vertex-shader').innerText;
+                const fragmentSrc = document.getElementById('fragment-shader').innerText;
+                const shaderProgram = initShaderProgram(context, vertexSrc, fragmentSrc);
+            }
+
+            function main() {
+                wireButtonPanel();
+                wireMediaControls();
+                wireCam();
+                startAudioThread();
+                if (window.location.href.indexOf('debug') !== -1) {
+                    document.getElementById('debug-mixers').classList.remove('hidden');
+                    wireDebugMixers();
+                }
+            }
+
+
+            main();
+            </script>
+            <script id="vertex-shader" type="x-shader/x-vertex">
+                // <![CDATA[
+                attribute vec2 position;
+                func main() {
+                    gl_Position = vec3(position, 0, 1);
+                }
+                // ]]>
+            </script>
+            <script id="fragment-shader" type="x-shader/x-fragment">
+                // <![CDATA[
+                attribute vec2 position;
+                func main() {
+                    gl_Position = vec3(position, 0, 1);
+                }
+                // ]]>
+            </script>
+        </main>
+    </body>
+</html>
