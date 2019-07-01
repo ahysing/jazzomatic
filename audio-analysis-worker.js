@@ -1,12 +1,11 @@
-'use strict';
+"use strict";
 const global = {
     averageSample: 0,
     averageSamples: [],
     peaks: [],
     lastLogTime: 0,
-    maxPCM: new Uint8Array(44100), // 44,100 Hz is a common sampling frequency. maxCPM contains one second of data
+    maxPCM: new Float32Array(44100 * 2), // 44,100 Hz is a common sampling frequency. maxCPM contains one second of data
     maxPCMidx: 0,
-    BPM: 0,
     BPMPosted: 0,
     sampleIdx: 0
 };
@@ -14,12 +13,8 @@ const global = {
 /* http://joesul.li/van/beat-detection-using-web-audio/ */
 
 // Beats per minute
-function calculateBPM(state, outputTimestamp, sampleIdx) {
-    if (outputTimestamp) {
-        return state.peaks.length / outputTimestamp.contextTime;
-    } else {
-        return state.peaks.length / sampleIdx;
-    }
+function calculateBPM(state, sampleIdx) {
+    return state.peaks.length / sampleIdx;
 }
 
 // Pulse-code modulation
@@ -33,6 +28,28 @@ function arrayMax(array) {
     };
     return array.reduce(max);
 }
+
+function peaksToTopBPM(peaks, sampleRate) {
+    var histrogram = new Uint16Array(2 * sampleRate);
+    if (peaks.length > 0) {
+        var previousValue = peaks[0];
+        for (var i = 1; i < peaks.length; i++) {
+            var currentValue = peaks[i];
+            var diff =  currentValue - previousValue;
+            if (diff > 0 && diff < histrogram.length) {
+                histrogram[diff] ++;
+            }
+
+            previousValue = currentValue;
+        }
+
+        histrogram.fill(0, 0, sampleRate/10);
+        var maxSampleDiffrence = arrayMax(histrogram);
+        return 60 * 1000 / maxSampleDiffrence / float(sampleRate);
+    }
+
+    return 0;
+}
 /**
  * This function looks at the frequencies in a song and tries to looks for interesting events for the camera.
  * Events are:
@@ -41,6 +58,7 @@ function arrayMax(array) {
  * * Solo parts
  */
 function lookForSongEvent(eventData) {
+    console.time("lookForSongEvent");
     function arithmeticAverage(sample) {
         var intArray = Uint32Array.from(sample);
         function sum(previousValue, currentValue) {
@@ -59,11 +77,11 @@ function lookForSongEvent(eventData) {
             return sqrDiff;
         });
 
-        var avgSquareDiff = average(squareDiffs);
+        var avgSquareDiff = arithmeticAverage(squareDiffs);
         return Math.sqrt(avgSquareDiff);
     };
 
-    global.sampleIdx = global.sampleIdx + 1;
+    global.sampleIdx++;
 
 
     var averageValue = arithmeticAverage(eventData.domainData);
@@ -76,43 +94,49 @@ function lookForSongEvent(eventData) {
 
 
     // This is my current experiment. If I am right we will be ready to predict beats based on that they are the larget sound around.
-    var maxPCMCurrentSample = calculateMaxPCM(eventData);
+    const maxPCMCurrentSample = calculateMaxPCM(eventData);
     global.maxPCM[global.maxPCMidx] = maxPCMCurrentSample;
-    global.maxPCMidx++
-    var maxValue = arrayMax(global.maxPCM);
-    var isInBeat = maxValue == maxPCMCurrentSample; 
+    global.maxPCMidx++;
+    const maxPCMValue = arrayMax(global.maxPCM);
+
+    const isInBeat = maxPCMValue == maxPCMCurrentSample; 
     if (isInBeat) {
-        var breakEvent = {
-            'command': 'break',
-            'break': breakHere
+        const beatEvent = {
+            "command": "beat",
+            "beat": global.sampleIdx
         };
 
-        events.push(breakEvent);
+        events.push(beatEvent);
+
+        global.peaks.push(global.sampleIdx);
+        var nextBPM = peaksToTopBPM(global.peaks);
+        if (Math.abs(nextBPM - global.BPMPosted) > 0.005) {
+            global.BPMPosted = nextBPM;
+            var bpmEvent = {
+                "command": "BPM",
+                "BPM": nextBPM
+            };
+    
+            events.push(bpmEvent);
+        }
     }
 
-    if (global.BPM !== 0 && global.BPM != global.BPMPosted) {
-        global.BPMPosted = global.BPM;
-        var bpmEvent = {
-            'command': 'BPM',
-            'BPM': global.BPM
-        };
-
-        events.push(bpmEvent);
+    
+    if (Math.trunc(eventData.currentTime) > global.lastLogTime) {
+        console.log("lookForSongEvent", global);
+        global.lastLogTime = Math.trunc(eventData.currentTime); 
     }
 
-    if (Math.trunc(eventData.outputTimesamp.contextTime) > global.lastLogTime) {
-        console.log('lookForSongEvent', global);
-        global.lastLogTime = Math.trunc(eventData.outputTimesamp.contextTime); 
-    }
-
+    console.timeEnd("lookForSongEvent");
     return events;
 }
 
-self.addEventListener('message', function(event) {
+self.addEventListener("message", function(event) {
     // recieving a message from a different page
-    if (event.data.command === 'registerControllerThread') {
-        console.log('registerControllerThread', event.data);
-    } else if (event.data.command === 'sample') {
+    if (event.data.command === "registerControllerThread") {
+        console.log("registerControllerThread", event.data);
+    } else if (event.data.command === "sample"
+    || event.data.command == "sample-lowpass") {
         const events = lookForSongEvent(event.data);
         if (events) {
             for (var i = 0; i < events.length; i++) {
@@ -121,21 +145,17 @@ self.addEventListener('message', function(event) {
             }
         }
     } else {
-        console.log('Unknown message recieved', event.data);
+        console.log("Unknown message recieved", event.data);
     }
 });
 
-self.addEventListener('install', function(event) {
+self.addEventListener("install", function(event) {
     main();
 });
 
-self.addEventListener('fetch', function(event) {
-});
-
-self.addEventListener('activate', function(event) {
-    console.log('ServiceWorker activated within the service worker');   
+self.addEventListener("activate", function(event) {
+    console.log("ServiceWorker activated");   
 });
 
 function main() {
-    console.log('main');
 }

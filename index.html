@@ -99,15 +99,15 @@
             <script type="text/javascript" src="static/js/audio.js"></script>
             <script type="text/javascript" src="static/js/video.js"></script>
             <script type="text/javascript">
-            'use strict';
+            "use strict";
 
             /* Start of web Audio functions */
             const global = {
                 analyser: null,
                 audioCtx: null,
                 sampleCallback: 0,
-                frequencyData: new Uint8Array(512),
-                domainData: new Uint8Array(512)
+                frequencyData: new Float32Array(512),
+                domainData: new Float32Array(512)
             };
 
             function createFFTAnalyserFromSource(element) {
@@ -117,10 +117,16 @@
                 const source = global.audioCtx.createMediaElementSource(element);
                 const analyser = global.audioCtx.createAnalyser();
                 analyser.fftSize = 512;
-                source.connect(analyser);
-                
+
+                // Create filter
+                var filter = global.audioCtx.createBiquadFilter();
+                filter.type = "lowpass";
+
+                source.connect(filter);
+                filter.connect(analyser);
+
                 if (analyser.frequencyBinCount != global.frequencyData.length) {
-                    global.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+                    global.frequencyData = new Float32Array(analyser.frequencyBinCount);
                 }
 
                 global.analyser = analyser;
@@ -149,15 +155,11 @@
                     return dataArray.length > 0 && dataArray.every(isZero) === false;
                 }
                 if (iterator < 100) {
-                    global.analyser.getByteFrequencyData(global.frequencyData);
-                    global.analyser.getByteTimeDomainData(global.domainData);
+                    global.analyser.getFloatFrequencyData(global.frequencyData);
+                    global.analyser.getFloatTimeDomainData(global.domainData);
                     if (isNotSilent(global.frequencyData) && isNotSilent(global.domainData)) {
-                        var outputTimestamp;
-                        if (global.audioCtx && global.audioCtx.getOutputTimestamp) {
-                            outputTimestamp = global.audioCtx.getOutputTimestamp();
-                        }
-
-                        navigator.serviceWorker.controller.postMessage({'command': 'sample', 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'outputTimestamp': outputTimestamp});
+                        const currentTime = global.audioCtx.currentTime;
+                        navigator.serviceWorker.controller.postMessage({'command': "sample-lowpass", 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'currentTime': currentTime});
                     }
                 } else {
                     console.error('Sample dropped');
