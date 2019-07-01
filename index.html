@@ -130,7 +130,7 @@
                 }
 
                 global.analyser = analyser;
-                startSampleLoop(global.analyser);
+                startSampleLoop(global.audioCtx);
             }
 
             function installAnalyser(element) {
@@ -166,12 +166,18 @@
                 }
             }
 
-            function startSampleLoop(analyser) {
+            function startSampleLoop(context) {
                 if (global.sampleCallback !== 0) {
                     stopSampleLoop();
                 }
-                const timeoutPrecise = (1000.0 / analyser.sampleRate);
+                // https://www.studybass.com/gear/bass-tone-and-eq/bass-frequency-range/
+                // The best would be to fetch every sample, but there are more samples than what a
+                // a normal computer can process in javascript
+                const sampleBinSize = 256;
+                const timeoutPrecise = (1000.0 * sampleBinSize / context.sampleRate);
                 const timoeut = Math.trunc(timeoutPrecise);
+                const minimumTimeout = 60;
+                var actualTimeout = Math.max(minimumTimeout, timoeut);
                 global.sampleCallback = setInterval(handleSample, timoeut);
             }
 
@@ -258,7 +264,7 @@
                     if (audio.duration != NaN) {
                         // TODO
                     }
-                } else if (event.data.command == "beat") {
+                } else if (event.data.command === "beat") {
                     console.log("beat", evt.data.beat);
                     
                     var beatMixer = document.getElementById("beat-mixer");
@@ -301,10 +307,15 @@
                 videoOnScreen.removeAttribute("poster");
                 const onSpeaker = document.getElementById("on-speaker");
                 
-                startSampleLoop(global.analyser);
-                onSpeaker.play();
-                if (global.audioCtx !== null) {
-                    global.audioCtx.resume();
+                if (global.analyser !== null) {
+                    startSampleLoop(global.audioCtx);
+                    
+                    onSpeaker.play();
+                    if (global.audioCtx !== null) {
+                        global.audioCtx.resume();
+                    }
+                } else {
+                    document.getElementById("error-box").innerText += "Unable to find started audio thread.\n";
                 }
             }
 

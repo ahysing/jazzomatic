@@ -26,7 +26,11 @@ function arrayMax(array) {
     function max(previousValue, currentValue) {
         return Math.max(previousValue, currentValue);
     };
-    return array.reduce(max);
+    if (array) {
+        return array.reduce(max);
+    } else {
+        return NaN;
+    }
 }
 
 function peaksToTopBPM(peaks, sampleRate) {
@@ -59,56 +63,60 @@ function peaksToTopBPM(peaks, sampleRate) {
  */
 function lookForSongEvent(eventData) {
     console.time("lookForSongEvent");
-    function arithmeticAverage(sample) {
-        var intArray = Uint32Array.from(sample);
-        function sum(previousValue, currentValue) {
-            return previousValue + currentValue;
-        }
+    try {
+        function arithmeticAverage(sample) {
+            var intArray = Uint32Array.from(sample);
+            function sum(previousValue, currentValue) {
+                return previousValue + currentValue;
+            }
 
-        var sampleSum = intArray.reduce(sum);
-        return sampleSum / intArray.length;
-    };
-
-    function standardDeviation(values) {
-        const avg = arithmeticAverage(values);
-        var squareDiffs = values.map(function(value) {
-            var diff = value - avg;
-            var sqrDiff = diff * diff;
-            return sqrDiff;
-        });
-
-        var avgSquareDiff = arithmeticAverage(squareDiffs);
-        return Math.sqrt(avgSquareDiff);
-    };
-
-    global.sampleIdx++;
-
-
-    var averageValue = arithmeticAverage(eventData.domainData);
-    global.averageSamples.push(averageValue);
-    global.averageSample = arithmeticAverage(global.averageSamples);
-    
-
-
-    var events = [];
-
-
-    // This is my current experiment. If I am right we will be ready to predict beats based on that they are the larget sound around.
-    const maxPCMCurrentSample = calculateMaxPCM(eventData);
-    global.maxPCM[global.maxPCMidx] = maxPCMCurrentSample;
-    global.maxPCMidx++;
-    const maxPCMValue = arrayMax(global.maxPCM);
-
-    const isInBeat = maxPCMValue == maxPCMCurrentSample; 
-    if (isInBeat) {
-        const beatEvent = {
-            "command": "beat",
-            "beat": global.sampleIdx
+            var sampleSum = intArray.reduce(sum);
+            return sampleSum / intArray.length;
         };
 
-        events.push(beatEvent);
+        function standardDeviation(values) {
+            const avg = arithmeticAverage(values);
+            var squareDiffs = values.map(function(value) {
+                var diff = value - avg;
+                var sqrDiff = diff * diff;
+                return sqrDiff;
+            });
 
-        global.peaks.push(global.sampleIdx);
+            var avgSquareDiff = arithmeticAverage(squareDiffs);
+            return Math.sqrt(avgSquareDiff);
+        };
+
+        global.sampleIdx++;
+
+
+        var averageValue = arithmeticAverage(eventData.domainData);
+        global.averageSamples.push(averageValue);
+        global.averageSample = arithmeticAverage(global.averageSamples);
+        
+
+
+        var events = [];
+
+
+        // This is my current experiment. If I am right we will be ready to predict beats based on that they are the larget sound around.
+        const maxPCMCurrentSample = calculateMaxPCM(eventData);
+        global.maxPCM[global.maxPCMidx] = maxPCMCurrentSample;
+        global.maxPCMidx++;
+        const maxPCMValue = arrayMax(global.maxPCM);
+
+        const isInBeat = maxPCMValue === maxPCMCurrentSample; 
+        if (isInBeat) {
+            const beatEvent = {
+                "command": "beat",
+                "beat": global.sampleIdx
+            };
+
+            events.push(beatEvent);
+
+            global.peaks.push(global.sampleIdx); 
+        }
+
+
         var nextBPM = peaksToTopBPM(global.peaks);
         if (Math.abs(nextBPM - global.BPMPosted) > 0.005) {
             global.BPMPosted = nextBPM;
@@ -116,19 +124,21 @@ function lookForSongEvent(eventData) {
                 "command": "BPM",
                 "BPM": nextBPM
             };
-    
+
             events.push(bpmEvent);
         }
-    }
+        
+        
+        if (Math.trunc(eventData.currentTime) > global.lastLogTime) {
+            console.log("lookForSongEvent", global);
+            global.lastLogTime = Math.trunc(eventData.currentTime); 
+        }
 
-    
-    if (Math.trunc(eventData.currentTime) > global.lastLogTime) {
-        console.log("lookForSongEvent", global);
-        global.lastLogTime = Math.trunc(eventData.currentTime); 
+        return events;
+    } finally {
+        console.timeEnd("lookForSongEvent");
+        return;
     }
-
-    console.timeEnd("lookForSongEvent");
-    return events;
 }
 
 self.addEventListener("message", function(event) {
@@ -136,7 +146,7 @@ self.addEventListener("message", function(event) {
     if (event.data.command === "registerControllerThread") {
         console.log("registerControllerThread", event.data);
     } else if (event.data.command === "sample"
-    || event.data.command == "sample-lowpass") {
+    || event.data.command === "sample-lowpass") {
         const events = lookForSongEvent(event.data);
         if (events) {
             for (var i = 0; i < events.length; i++) {
