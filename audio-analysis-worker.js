@@ -33,23 +33,28 @@ function arrayMax(array) {
     }
 }
 
-function peaksToTopBPM(peaks, sampleRate) {
-    var histrogram = new Uint16Array(2 * sampleRate);
-    if (peaks.length > 0) {
-        var previousValue = peaks[0];
-        for (var i = 1; i < peaks.length; i++) {
-            var currentValue = peaks[i];
-            var diff =  currentValue - previousValue;
-            if (diff > 0 && diff < histrogram.length) {
-                histrogram[diff] ++;
+function peaksToTopBPM(peakIndecies, sampleRate) {
+    function calculateIndexDiff(peakIndecies, sampleRate) {
+        var indexDiffHistrogram = new Float32Array(2 * sampleRate);
+        var previousIndex = peakIndecies[0];
+        for (var i = 1; i < peakIndecies.length; i++) {
+            var currentIndex = peakIndecies[i];
+            var diff =  currentIndex - previousIndex;
+            if (diff > 0 && diff < indexDiffHistrogram.length) {
+                indexDiffHistrogram[diff] ++;
             }
 
-            previousValue = currentValue;
+            previousValue = currentIndex;
         }
 
-        histrogram.fill(0, 0, sampleRate/10);
-        var maxSampleDiffrence = arrayMax(histrogram);
-        return 60 * 1000 / maxSampleDiffrence / float(sampleRate);
+        return indexDiffHistrogram;
+    };
+
+    if (peakIndecies.length > 0) {
+        var indexDiffHistrogram = calculateIndexDiff(peakIndecies, sampleRate)
+        indexDiffHistrogram.fill(0, 0, sampleRate / 10); // to remove any potential noise at the start.
+        var maxSampleDiffrence = arrayMax(indexDiffHistrogram);
+        return 60 * maxSampleDiffrence / sampleRate;
     }
 
     return 0;
@@ -62,7 +67,7 @@ function peaksToTopBPM(peaks, sampleRate) {
  * * Solo parts
  */
 function lookForSongEvent(eventData) {
-    console.time("lookForSongEvent");
+    // console.time("lookForSongEvent");
     try {
         function arithmeticAverage(sample) {
             var intArray = Uint32Array.from(sample);
@@ -72,18 +77,6 @@ function lookForSongEvent(eventData) {
 
             var sampleSum = intArray.reduce(sum);
             return sampleSum / intArray.length;
-        };
-
-        function standardDeviation(values) {
-            const avg = arithmeticAverage(values);
-            var squareDiffs = values.map(function(value) {
-                var diff = value - avg;
-                var sqrDiff = diff * diff;
-                return sqrDiff;
-            });
-
-            var avgSquareDiff = arithmeticAverage(squareDiffs);
-            return Math.sqrt(avgSquareDiff);
         };
 
         global.sampleIdx++;
@@ -98,7 +91,9 @@ function lookForSongEvent(eventData) {
         var events = [];
 
 
-        // This is my current experiment. If I am right we will be ready to predict beats based on that they are the larget sound around.
+        // This is my current experiment.
+        // If I am right we will be ready to predict beats based on that they are 
+        // the larget sound around.
         const maxPCMCurrentSample = calculateMaxPCM(eventData);
         global.maxPCM[global.maxPCMidx] = maxPCMCurrentSample;
         global.maxPCMidx++;
@@ -127,7 +122,7 @@ function lookForSongEvent(eventData) {
 
             events.push(bpmEvent);
         }
-        
+
         
         if (Math.trunc(eventData.currentTime) > global.lastLogTime) {
             console.log("lookForSongEvent", global);
@@ -136,8 +131,7 @@ function lookForSongEvent(eventData) {
 
         return events;
     } finally {
-        console.timeEnd("lookForSongEvent");
-        return;
+        // console.timeEnd("lookForSongEvent");
     }
 }
 
@@ -146,7 +140,7 @@ self.addEventListener("message", function(event) {
     if (event.data.command === "registerControllerThread") {
         console.log("registerControllerThread", event.data);
     } else if (event.data.command === "sample"
-    || event.data.command === "sample-lowpass") {
+            || event.data.command === "sample-lowpass") {
         const events = lookForSongEvent(event.data);
         if (events) {
             for (var i = 0; i < events.length; i++) {

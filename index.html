@@ -176,8 +176,6 @@
                 const sampleBinSize = 256;
                 const timeoutPrecise = (1000.0 * sampleBinSize / context.sampleRate);
                 const timoeut = Math.trunc(timeoutPrecise);
-                const minimumTimeout = 60;
-                var actualTimeout = Math.max(minimumTimeout, timoeut);
                 global.sampleCallback = setInterval(handleSample, timoeut);
             }
 
