@@ -130,7 +130,7 @@
                 }
 
                 global.analyser = analyser;
-                startSampleLoop(global.audioCtx);
+                startSampleLoop(global.audioCtx, global.analyser);
             }
 
             function installAnalyser(element) {
@@ -305,7 +305,7 @@
                 videoOnScreen.removeAttribute("poster");
                 const onSpeaker = document.getElementById("on-speaker");
                 
-                if (global.analyser !== null) {
+                if (global.analyser !== null && global.analyser !== undefined) {
                     startSampleLoop(global.audioCtx, global.analyser);
                     
                     onSpeaker.play();

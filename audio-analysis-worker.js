@@ -26,7 +26,7 @@ function arrayMax(array) {
     function max(previousValue, currentValue) {
         return Math.max(previousValue, currentValue);
     };
-    if (array) {
+    if (array && array.length) {
         return array.reduce(max);
     } else {
         return NaN;
@@ -44,7 +44,7 @@ function peaksToTopBPM(peakIndecies, sampleRate) {
                 indexDiffHistrogram[diff] ++;
             }
 
-            previousValue = currentIndex;
+            previousIndex = currentIndex;
         }
 
         return indexDiffHistrogram;
