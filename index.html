@@ -166,14 +166,14 @@
                 }
             }
 
-            function startSampleLoop(context) {
+            function startSampleLoop(context, analyser) {
                 if (global.sampleCallback !== 0) {
                     stopSampleLoop();
                 }
                 // https://www.studybass.com/gear/bass-tone-and-eq/bass-frequency-range/
                 // The best would be to fetch every sample, but there are more samples than what a
                 // a normal computer can process in javascript
-                const sampleBinSize = 256;
+                const sampleBinSize = analyser.fftSize;
                 const timeoutPrecise = (1000.0 * sampleBinSize / context.sampleRate);
                 const timoeut = Math.trunc(timeoutPrecise);
                 global.sampleCallback = setInterval(handleSample, timoeut);
@@ -306,7 +306,7 @@
                 const onSpeaker = document.getElementById("on-speaker");
                 
                 if (global.analyser !== null) {
-                    startSampleLoop(global.audioCtx);
+                    startSampleLoop(global.audioCtx, global.analyser);
                     
                     onSpeaker.play();
                     if (global.audioCtx !== null) {
