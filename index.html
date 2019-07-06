@@ -90,6 +90,54 @@
                 <canvas id="vocal-detecter-mixer" width="820" height="150"></canvas>
             </div>
 
+            <div class="debug">
+                <script type="text/javascript">
+                "use strict";
+                function blockUntilRecieverReady() {
+                    return 0;
+                }
+                function postMessageToAudioAnalysis(message) {
+                    window.postMessage(message);
+                }
+                function startAudioAnalysis() {
+                    document.write("<script type=\"text/javascript\" src=\"audio-analysis-worker.js\"><\/script>");
+                }
+                /*
+                function blockUntilRecieverReady() {
+                    var retryTimes = 0;
+                    while (!navigator.serviceWorker && retryTimes++ < 100) {
+                        console.log('waiting for serviceWorker to spawn');
+                    }
+
+                    while (!navigator.serviceWorker.controller && retryTimes++ < 100) {
+                        console.log('waiting for serviceWorker to get activated');
+                    }
+
+                    return retryTimes;
+                }
+
+                function postMessageToAudioAnalysis(message) {
+                    navigator.serviceWorker.controller.postMessage(message);
+                }
+
+                function startAudioAnalysis() {
+                    navigator.serviceWorker.register('/audio-analysis-worker.js', {
+                        scope: '/'
+                    }).then(function (registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);   
+                        blockUntilRecieverReady();
+                        
+                        var message = {'command': 'registerControllerThread'};
+                        postMessageToAudioAnalysis(message);
+                    }).catch (function (error) {
+                        // Something went wrong during registration. The service-worker.js file
+                        // might be unavailable or contain a syntax error.
+                        console.log('ServiceWorker registration failed: ', error.message);
+                    });
+                }
+                */
+                </script>
+            </div>
             <noscript>
                 <div class="tooltip">
                 This page only works with javascript enabled. We are not able to run properly
@@ -98,6 +146,7 @@
             <div id="error-box" class="tooltip hidden"></div>
             <script type="text/javascript" src="static/js/audio.js"></script>
             <script type="text/javascript" src="static/js/video.js"></script>
+            
             <script type="text/javascript">
             "use strict";
 
@@ -138,14 +187,7 @@
             }
 
             function handleSample() {
-                var iterator = 0;
-                while (!navigator.serviceWorker && iterator++ < 100) {
-                    console.log('waiting for serviceWorker to spawn');
-                }
-
-                while (!navigator.serviceWorker.controller && iterator++ < 100) {
-                    console.log('waiting for serviceWorker to get activated');
-                }
+                var retryTimes = blockUntilRecieverReady();
 
                 function isNotSilent(dataArray) {
                     function isZero(value, index, array) {
@@ -154,12 +196,13 @@
 
                     return dataArray.length > 0 && dataArray.every(isZero) === false;
                 }
-                if (iterator < 100) {
+                if (retryTimes < 100) {
                     global.analyser.getFloatFrequencyData(global.frequencyData);
                     global.analyser.getFloatTimeDomainData(global.domainData);
                     if (isNotSilent(global.frequencyData) && isNotSilent(global.domainData)) {
                         const currentTime = global.audioCtx.currentTime;
-                        navigator.serviceWorker.controller.postMessage({'command': "sample-lowpass", 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'currentTime': currentTime});
+                        var message = {'command': "sample-lowpass", 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'currentTime': currentTime};
+                        postMessageToAudioAnalysis(message);
                     }
                 } else {
                     console.error('Sample dropped');
@@ -275,27 +318,7 @@
 
             let worker = null;
             function startAudioThread() {
-                navigator.serviceWorker.register('/audio-analysis-worker.js', {
-                    scope: '/'
-                }).then(function (registration) {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);   
-                    while (!navigator.serviceWorker) {
-                        console.log('waiting for serviceWorker to spawn');
-                    }
-
-                    while (!navigator.serviceWorker.controller) {
-                        console.log('waiting for serviceWorker to get activated');
-                    }
-                    
-                    const worker = navigator.serviceWorker.controller;
-                    worker.postMessage({'command': 'registerControllerThread'});
-                }).catch (function (error) {
-                    // Something went wrong during registration. The service-worker.js file
-                    // might be unavailable or contain a syntax error.
-                    console.log('ServiceWorker registration failed: ', error.message);
-                });
-
-
+                startAudioAnalysis();
                 var audio = document.getElementById('on-speaker');
                 installAnalyser(audio);
             }

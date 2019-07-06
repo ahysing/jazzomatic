@@ -1,5 +1,5 @@
 "use strict";
-const global = {
+const audioAnalysisGlobal = {
     averageSample: 0,
     averageSamples: [],
     peaks: [],
@@ -9,7 +9,14 @@ const global = {
     BPMPosted: 0,
     sampleIdx: 0
 };
-
+function postMessageForMainThread(message) {
+    postMessage(message);
+}
+/*
+function postMessageForMainThread(message) {
+    this.postMessage(message);
+}
+*/
 /* http://joesul.li/van/beat-detection-using-web-audio/ */
 
 // Beats per minute
@@ -79,12 +86,12 @@ function lookForSongEvent(eventData) {
             return sampleSum / intArray.length;
         };
 
-        global.sampleIdx++;
+        audioAnalysisGlobal.sampleIdx++;
 
 
         var averageValue = arithmeticAverage(eventData.domainData);
-        global.averageSamples.push(averageValue);
-        global.averageSample = arithmeticAverage(global.averageSamples);
+        audioAnalysisGlobal.averageSamples.push(averageValue);
+        audioAnalysisGlobal.averageSample = arithmeticAverage(audioAnalysisGlobal.averageSamples);
         
 
 
@@ -95,26 +102,26 @@ function lookForSongEvent(eventData) {
         // If I am right we will be ready to predict beats based on that they are 
         // the larget sound around.
         const maxPCMCurrentSample = calculateMaxPCM(eventData);
-        global.maxPCM[global.maxPCMidx] = maxPCMCurrentSample;
-        global.maxPCMidx++;
-        const maxPCMValue = arrayMax(global.maxPCM);
+        audioAnalysisGlobal.maxPCM[audioAnalysisGlobal.maxPCMidx] = maxPCMCurrentSample;
+        audioAnalysisGlobal.maxPCMidx++;
+        const maxPCMValue = arrayMax(audioAnalysisGlobal.maxPCM);
 
         const isInBeat = maxPCMValue === maxPCMCurrentSample; 
         if (isInBeat) {
             const beatEvent = {
                 "command": "beat",
-                "beat": global.sampleIdx
+                "beat": audioAnalysisGlobal.sampleIdx
             };
 
             events.push(beatEvent);
 
-            global.peaks.push(global.sampleIdx); 
+            audioAnalysisGlobal.peaks.push(audioAnalysisGlobal.sampleIdx); 
         }
 
 
-        var nextBPM = peaksToTopBPM(global.peaks);
-        if (Math.abs(nextBPM - global.BPMPosted) > 0.005) {
-            global.BPMPosted = nextBPM;
+        var nextBPM = peaksToTopBPM(audioAnalysisGlobal.peaks);
+        if (Math.abs(nextBPM - audioAnalysisGlobal.BPMPosted) > 0.005) {
+            audioAnalysisGlobal.BPMPosted = nextBPM;
             var bpmEvent = {
                 "command": "BPM",
                 "BPM": nextBPM
@@ -124,9 +131,8 @@ function lookForSongEvent(eventData) {
         }
 
         
-        if (Math.trunc(eventData.currentTime) > global.lastLogTime) {
-            console.log("lookForSongEvent", global);
-            global.lastLogTime = Math.trunc(eventData.currentTime); 
+        if (Math.trunc(eventData.currentTime) > audioAnalysisGlobal.lastLogTime) {
+            audioAnalysisGlobal.lastLogTime = Math.trunc(eventData.currentTime); 
         }
 
         return events;
@@ -145,10 +151,10 @@ self.addEventListener("message", function(event) {
         if (events) {
             for (var i = 0; i < events.length; i++) {
                 var eventForDispatch = events[i];
-                this.postMessage(eventForDispatch);
+                postMessageForMainThread(eventForDispatch);
             }
         }
-    } else {
+    } else if (event.data.command != "beat" && event.data.command != "BPM") {
         console.log("Unknown message recieved", event.data);
     }
 });
