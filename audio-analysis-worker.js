@@ -9,14 +9,17 @@ const audioAnalysisGlobal = {
     BPMPosted: 0,
     sampleIdx: 0
 };
+
 function postMessageForMainThread(message) {
-    postMessage(message);
+    window.postMessage(message);
 }
+
 /*
 function postMessageForMainThread(message) {
     this.postMessage(message);
 }
 */
+
 /* http://joesul.li/van/beat-detection-using-web-audio/ */
 
 // Beats per minute
@@ -33,6 +36,7 @@ function arrayMax(array) {
     function max(previousValue, currentValue) {
         return Math.max(previousValue, currentValue);
     };
+    
     if (array && array.length) {
         return array.reduce(max);
     } else {
@@ -154,7 +158,9 @@ self.addEventListener("message", function(event) {
                 postMessageForMainThread(eventForDispatch);
             }
         }
-    } else if (event.data.command != "beat" && event.data.command != "BPM") {
+    } else 
+    if (event.data.command != "beat" && event.data.command != "BPM") // So far we are not able to dissect main thread vs analysis thread messages.
+    {
         console.log("Unknown message recieved", event.data);
     }
 });
