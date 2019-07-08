@@ -28,9 +28,11 @@
                 document.getElementById("on-screen").addEventListener("pause", stopTrack);
                 document.getElementById("on-screen").addEventListener("play", playTrack);
             }
+
             function stopTrack() {
                 document.getElementById("on-speaker").pause();
             }
+
             function playTrack() {
                 const videoOnScreen = document.getElementById("on-screen");
                 videoOnScreen.removeAttribute("poster");
@@ -40,9 +42,10 @@
                     onSpeaker.play();
 
             }
+
             function main() {
                 wireMediaControls();
-            };
+            }
 
             main();
           </script>
