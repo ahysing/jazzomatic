@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="description" content="jazzomatic is a program to create awsome jazz jams.">
+        <meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1, maximum-scale=1">
+        <meta id="theme-color" name="theme-color" content="#ffffff">
+        <link rel="icon" sizes="192x192" href="static/icon-192x192.png">
+        <title>jazzomatic</title>
+        <style>
+            label {
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+
+        <main id="container">
+            <audio id="on-speaker" crossorigin="anonymous" controls>
+                <source src="static/tracks/track%203.mp3" type="audio/mp3"></source>
+                <source src="static/tracks/example.ogg" type="audio/ogg"></source> <!-- this file works as feedback to the developer whenver MP3 is not supported in the browser. -->
+            </audio>
+            <div class="parameter">
+                <input type="range" max="100" min="0" id="range-frequency"/>
+                <label>frequency</label>    <span id="frequency"></span>
+            </div>
+            <div class="parameter">
+                <input type="range" max="100" min="0" id="range-detune"/>
+                <label>detune</label>    <span id="detune"></span>
+            </div>
+            <div class="parameter">
+                <input type="range" max="100" min="0" id="range-Q"/>
+                <label>Q</label>    <span id="Q"></span>
+            </div>
+            <div class="parameter">
+                <input type="range" max="100" min="0" id="range-gain"/>
+                <label>gain</label>    <span id="gain"></span>
+            </div>
+            <div id="error-box" class="tooltip hidden"></div>
+            <script>
+            "use strict";
+            const globals = {
+              audioCtx: null,
+              biquadFilter: null
+            };
+
+            function wireAudioContext(element) {
+                var audioCtx = new AudioContext();
+                var biquadFilter = audioCtx.createBiquadFilter();
+                biquadFilter.type = "highshelf";
+                var source = audioCtx.createMediaElementSource(element);
+                source.connect(biquadFilter);
+                biquadFilter.connect(audioCtx.destination);
+                globals.biquadFilter = biquadFilter;
+                globals.audioCtx = audioCtx;
+            }
+
+            function wireParameters() {
+                var rangeQ = document.getElementById("range-Q");
+                var rangeFrequency = document.getElementById("range-frequency");
+                var rangeDetune = document.getElementById("range-detune");
+                var rangeGain = document.getElementById("range-gain");
+
+                rangeQ.addEventListener("input", function(inputEvent) {
+                    Q.innerText = inputEvent.target.value;
+                    const valueAsNumber = inputEvent.target.valueAsNumber;
+                    if (valueAsNumber !== NaN && typeof(valueAsNumber) == "number") {
+                        const currentTime = globals.audioCtx.currentTime;
+                        globals.biquadFilter.Q.setValueAtTime(valueAsNumber, currentTime);
+                    }
+                });
+
+                rangeFrequency.addEventListener("input", function(inputEvent) {
+                    frequency.innerText = inputEvent.target.value;
+                    const valueAsNumber = inputEvent.target.valueAsNumber;
+                    if (valueAsNumber !== NaN && typeof(valueAsNumber) == "number") {
+                        const currentTime = globals.audioCtx.currentTime;
+                        globals.biquadFilter.frequency.setValueAtTime(valueAsNumber, currentTime);
+                    }
+                });
+
+                rangeDetune.addEventListener("input", function(inputEvent) {
+                    detune.innerText = inputEvent.target.value;
+                    const valueAsNumber = inputEvent.target.valueAsNumber;
+                    if (valueAsNumber !== NaN && typeof(valueAsNumber) == "number") {
+                        const currentTime = globals.audioCtx.currentTime;
+                        globals.biquadFilter.detune.setValueAtTime(valueAsNumber, currentTime);
+                    }
+                });
+
+                rangeGain.addEventListener("input", function(inputEvent) {
+                    gain.innerText = inputEvent.target.value;
+                    const valueAsNumber = inputEvent.target.valueAsNumber;
+                    if (valueAsNumber !== NaN && typeof(valueAsNumber) == "number") {
+                        const currentTime = globals.audioCtx.currentTime;
+                        globals.biquadFilter.gain.setValueAtTime(valueAsNumber, currentTime);
+                    }
+                });
+            }
+
+            function wireRanges(biquadFilter) {
+                var rangeQ = document.getElementById("range-Q");
+                var rangeFrequency = document.getElementById("range-frequency");
+                var rangeDetune = document.getElementById("range-detune");
+                var rangeGain = document.getElementById("range-gain");
+
+                rangeQ.min = biquadFilter.Q.minValue;
+                rangeFrequency.min = biquadFilter.frequency.minValue;
+                rangeDetune.min = biquadFilter.detune.minValue;
+                rangeGain.min = biquadFilter.gain.minValue;
+
+                rangeQ.max = biquadFilter.Q.maxValue;
+                rangeFrequency.max = biquadFilter.frequency.maxValue;
+                rangeDetune.max = biquadFilter.detune.maxValue;
+                rangeGain.max = biquadFilter.gain.maxValue;
+
+                rangeQ.step = (biquadFilter.Q.maxValue - biquadFilter.Q.minValue) / 1000;
+                rangeFrequency.step = (biquadFilter.frequency.maxValue - biquadFilter.frequency.minValue) / 1000;
+                rangeDetune.step = (biquadFilter.detune.maxValue - biquadFilter.detune.minValue) / 1000;
+                rangeGain.step = (biquadFilter.gain.maxValue - biquadFilter.gain.minValue) / 1000;
+            }
+
+            function wireLabels(biquadFilter) {
+                var Q = document.getElementById("Q");
+                Q.innerText = biquadFilter.Q.value;
+                var frequency = document.getElementById("frequency");
+                frequency.innerText = biquadFilter.frequency.value;
+                var detune = document.getElementById("detune");
+                detune.innerText = biquadFilter.detune.value;
+                var gain = document.getElementById("gain");
+                gain.innerText = biquadFilter.gain.value;
+            }
+
+            function stopTrack() {
+                document.getElementById("on-speaker").pause();
+            }
+
+            function playTrack() {
+                const onSpeaker = document.getElementById("on-speaker");
+                onSpeaker.play();
+            }
+
+            function main() {
+                var audio = document.getElementById("on-speaker");
+                wireAudioContext(audio);
+                wireParameters();
+                wireRanges(globals.biquadFilter);
+                wireLabels(globals.biquadFilter);
+            }
+
+            main();
+          </script>
+        </main>
+    </body>
+</html>

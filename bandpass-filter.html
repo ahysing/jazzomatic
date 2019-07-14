@@ -47,7 +47,7 @@
             function wireAudioContext(element) {
                 var audioCtx = new AudioContext();
                 var biquadFilter = audioCtx.createBiquadFilter();
-                biquadFilter.type = "highpass";
+                biquadFilter.type = "bandpass";
                 var source = audioCtx.createMediaElementSource(element);
                 source.connect(biquadFilter);
                 biquadFilter.connect(audioCtx.destination);
@@ -60,7 +60,7 @@
                 var rangeFrequency = document.getElementById("range-frequency");
                 var rangeDetune = document.getElementById("range-detune");
                 var rangeGain = document.getElementById("range-gain");
-                
+
                 rangeQ.addEventListener("input", function(inputEvent) {
                     Q.innerText = inputEvent.target.value;
                     const valueAsNumber = inputEvent.target.valueAsNumber;
@@ -69,7 +69,7 @@
                         globals.biquadFilter.Q.setValueAtTime(valueAsNumber, currentTime);
                     }
                 });
-                
+
                 rangeFrequency.addEventListener("input", function(inputEvent) {
                     frequency.innerText = inputEvent.target.value;
                     const valueAsNumber = inputEvent.target.valueAsNumber;
@@ -103,21 +103,21 @@
                 var rangeFrequency = document.getElementById("range-frequency");
                 var rangeDetune = document.getElementById("range-detune");
                 var rangeGain = document.getElementById("range-gain");
-                
+
                 rangeQ.min = biquadFilter.Q.minValue;
                 rangeFrequency.min = biquadFilter.frequency.minValue;
                 rangeDetune.min = biquadFilter.detune.minValue;
                 rangeGain.min = biquadFilter.gain.minValue;
-                
+
                 rangeQ.max = biquadFilter.Q.maxValue;
                 rangeFrequency.max = biquadFilter.frequency.maxValue;
                 rangeDetune.max = biquadFilter.detune.maxValue;
                 rangeGain.max = biquadFilter.gain.maxValue;
 
-                rangeQ.step = (biquadFilter.Q.maxValue - biquadFilter.Q.minValue) / 100;
-                rangeFrequency.step = (biquadFilter.frequency.maxValue - biquadFilter.frequency.minValue) / 100;
-                rangeDetune.step = (biquadFilter.detune.maxValue - biquadFilter.detune.minValue) / 100;
-                rangeGain.step = (biquadFilter.gain.maxValue - biquadFilter.gain.minValue) / 100;
+                rangeQ.step = (biquadFilter.Q.maxValue - biquadFilter.Q.minValue) / 1000;
+                rangeFrequency.step = (biquadFilter.frequency.maxValue - biquadFilter.frequency.minValue) / 1000;
+                rangeDetune.step = (biquadFilter.detune.maxValue - biquadFilter.detune.minValue) / 1000;
+                rangeGain.step = (biquadFilter.gain.maxValue - biquadFilter.gain.minValue) / 1000;
             }
 
             function wireLabels(biquadFilter) {
