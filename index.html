@@ -61,8 +61,9 @@
             .in-beat { 
                  /* This timing applies on the way OUT */
                 transition-timing-function: ease-in-out;
+                transition-property: background-color;
                 /* Quick on the way out */
-                transition: 0.2s;
+                transition-duration: 0.2s;
                 background-color: white;   
             }
         </style>
@@ -81,8 +82,8 @@
         </aside>
         <main id="container">
             <audio id="on-speaker" crossorigin="anonymous">
-                <source src="static/tracks/track%203.mp3" type="audio/mp3"></source>
-                <source src="static/tracks/example.ogg" type="audio/ogg"></source> <!-- this file works as feedback to the developer whenver MP3 is not supported in the browser. -->
+                <source src="static/tracks/track%203.mp3" type="audio/mp3"/>
+                <source src="static/tracks/example.ogg" type="audio/ogg"/><!-- this file works as feedback to the developer whenver MP3 is not supported in the browser. -->
             </audio>
             <video id="source-video" playsinline autoplay class="source-video"></video>
             <canvas id="back-buffer" class="back-buffer" width="1" height="1"></canvas>
@@ -106,7 +107,6 @@
             <div id="error-box" class="tooltip hidden"></div>
             <script type="text/javascript" src="static/js/audio.js"></script>
             <script type="text/javascript" src="static/js/video.js"></script>
-            
             <script type="text/javascript" src="index.js"></script>
             <script id="vertex-shader" type="x-shader/x-vertex">
                 // <![CDATA[

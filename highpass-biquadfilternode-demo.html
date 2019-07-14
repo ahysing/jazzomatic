@@ -47,7 +47,7 @@
             function wireAudioContext(element) {
                 var audioCtx = new AudioContext();
                 var biquadFilter = audioCtx.createBiquadFilter();
-                biquadFilter.type = "lowpass";
+                biquadFilter.type = "highpass";
                 var source = audioCtx.createMediaElementSource(element);
                 source.connect(biquadFilter);
                 biquadFilter.connect(audioCtx.destination);

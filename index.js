@@ -30,6 +30,8 @@ function wireAudioContextAndFiltersStartSampling(element) {
     var speakers = global.audioCtx.destination;
     source.connect(speakers);
 
+    source.start(0);
+    
     if (analyser.frequencyBinCount != global.frequencyData.length) {
         global.frequencyData = new Float32Array(analyser.frequencyBinCount);
     }
@@ -52,7 +54,7 @@ function handleSample() {
         global.analyser.getFloatFrequencyData(global.frequencyData);
         global.analyser.getFloatTimeDomainData(global.domainData);
         if (isNotSilent(global.frequencyData) && isNotSilent(global.domainData)) {
-            const currentTime = global.audioCtx.currentTime;
+            var currentTime = global.audioCtx.currentTime;
             var message = {'command': "sample-lowpass", 'domainData': global.domainData, 'frequencyData': global.frequencyData, 'currentTime': currentTime};
             postMessageToAudioAnalysis(message);
         }
@@ -164,12 +166,11 @@ function handleAudioMessage(event) {
         }, 200);
     } else if (event.data.command === "beat") {
         console.log("beat", event.data.beat);
-
         var beatMixer = document.getElementById("beat-mixer");
         beatMixer.classList.add("in-beat");
         setTimeout(function() {
             document.getElementById("beat-mixer").classList.remove("in-beat");
-        }, 100);
+        }, 200);
     }
 };
 

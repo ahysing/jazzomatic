@@ -1,11 +1,8 @@
 "use strict";
 const audioAnalysisGlobal = {
-    averageSample: 0,
-    averageSamples: [],
-    peaks: [],
-    lastLogTime: 0,
-    maxPCM: new Float32Array(44100 * 2), // 44,100 Hz is a common sampling frequency. maxCPM contains one second of data
-    maxPCMidx: 0,
+    samplesMax: [],
+    samplesAt: [],
+    peakAtMS: null,
     BPMPosted: 0,
     sampleIdx: 0
 };
@@ -24,7 +21,7 @@ function postMessageForMainThread(message) {
 
 // Beats per minute
 function calculateBPM(state, sampleIdx) {
-    return state.peaks.length / sampleIdx;
+    return state.samplesMax.length / sampleIdx;
 }
 
 // Pulse-code modulation
@@ -44,12 +41,24 @@ function arrayMax(array) {
     }
 }
 
-function peaksToTopBPM(peakIndecies, sampleRate) {
-    function calculateIndexDiff(peakIndecies, sampleRate) {
+function findLastTwoSecondPeaks(audioAnalysisGlobal, nowMS) {
+    const TwoSeconds = 2000;
+    const nowMinusTwoSeconds = nowMS - TwoSeconds;
+
+    var i = audioAnalysisGlobal.samplesAt.length - 1;
+    while (i >= 0 && audioAnalysisGlobal.samplesAt[i] > nowMinusTwoSeconds) {
+        i = i - 1;
+    }
+    
+    return audioAnalysisGlobal.samplesMax.slice(i);
+}
+
+function peaksToTopBPM(peaksAtMS, sampleRate) {
+    function calculateIndexDiff(peaksAtMS, sampleRate) {
         var indexDiffHistrogram = new Float32Array(2 * sampleRate);
-        var previousIndex = peakIndecies[0];
-        for (var i = 1; i < peakIndecies.length; i++) {
-            var currentIndex = peakIndecies[i];
+        var previousIndex = peaksAtMS[0];
+        for (var i = 1; i < peaksAtMS.length; i++) {
+            var currentIndex = peaksAtMS[i];
             var diff =  currentIndex - previousIndex;
             if (diff > 0 && diff < indexDiffHistrogram.length) {
                 indexDiffHistrogram[diff] ++;
@@ -61,14 +70,20 @@ function peaksToTopBPM(peakIndecies, sampleRate) {
         return indexDiffHistrogram;
     };
 
-    if (peakIndecies.length > 0) {
-        var indexDiffHistrogram = calculateIndexDiff(peakIndecies, sampleRate)
+    if (peaksAtMS.length > 0) {
+        var indexDiffHistrogram = calculateIndexDiff(peaksAtMS, sampleRate)
         indexDiffHistrogram.fill(0, 0, sampleRate / 10); // to remove any potential noise at the start.
         var maxSampleDiffrence = arrayMax(indexDiffHistrogram);
         return 60 * maxSampleDiffrence / sampleRate;
     }
 
     return 0;
+}
+
+function convertCurrentTimeToMS(currentTime) {
+    const currentTimeMS =  1000 * currentTime;
+    const songAtMS = Math.trunc(currentTimeMS);
+    return songAtMS;
 }
 /**
  * This function looks at the frequencies in a song and tries to looks for interesting events for the camera.
@@ -90,40 +105,48 @@ function lookForSongEvent(eventData) {
             return sampleSum / intArray.length;
         };
 
+        // AudioContext currentTime delivers seconds since song was started.
+        const songAtMS = convertCurrentTimeToMS(eventData.currentTime);
         audioAnalysisGlobal.sampleIdx++;
 
-
-        var averageValue = arithmeticAverage(eventData.domainData);
-        audioAnalysisGlobal.averageSamples.push(averageValue);
-        audioAnalysisGlobal.averageSample = arithmeticAverage(audioAnalysisGlobal.averageSamples);
+        var events = [];
         
 
-
-        var events = [];
-
-
+        
         // This is my current experiment.
         // If I am right we will be ready to predict beats based on that they are 
         // the larget sound around.
         const maxPCMCurrentSample = calculateMaxPCM(eventData);
-        audioAnalysisGlobal.maxPCM[audioAnalysisGlobal.maxPCMidx] = maxPCMCurrentSample;
-        audioAnalysisGlobal.maxPCMidx++;
-        const maxPCMValue = arrayMax(audioAnalysisGlobal.maxPCM);
-
-        const isInBeat = maxPCMValue === maxPCMCurrentSample; 
+        
+        audioAnalysisGlobal.samplesMax.push(maxPCMCurrentSample); 
+        audioAnalysisGlobal.samplesAt.push(songAtMS);
+        
+        const lastSamplesMax = findLastTwoSecondPeaks(audioAnalysisGlobal, songAtMS);
+        const maxPCMValue = arrayMax(lastSamplesMax);
+        if (audioAnalysisGlobal.sampleIdx % 200 == 0) {
+            // console.log("song at ms", songAtMS);
+            // console.log("beats", lastSamplesMax);
+        }
+        const isBeatDetected = maxPCMValue === maxPCMCurrentSample;
+        var isFarFromBeat = true;
+        if (audioAnalysisGlobal.peakAtMS !== 0) {
+            const twoHundredMS = 200;
+            isFarFromBeat = (songAtMS - audioAnalysisGlobal.peakAtMS) > twoHundredMS;
+        }
+        
+        const isInBeat = isBeatDetected && isFarFromBeat; 
         if (isInBeat) {
+            audioAnalysisGlobal.peakAtMS = songAtMS;
             const beatEvent = {
                 "command": "beat",
-                "beat": audioAnalysisGlobal.sampleIdx
+                "beat": songAtMS
             };
 
             events.push(beatEvent);
-
-            audioAnalysisGlobal.peaks.push(audioAnalysisGlobal.sampleIdx); 
         }
 
 
-        var nextBPM = peaksToTopBPM(audioAnalysisGlobal.peaks);
+        var nextBPM = peaksToTopBPM(lastSamplesMax);
         if (Math.abs(nextBPM - audioAnalysisGlobal.BPMPosted) > 0.005) {
             audioAnalysisGlobal.BPMPosted = nextBPM;
             var bpmEvent = {
@@ -132,11 +155,6 @@ function lookForSongEvent(eventData) {
             };
 
             events.push(bpmEvent);
-        }
-
-        
-        if (Math.trunc(eventData.currentTime) > audioAnalysisGlobal.lastLogTime) {
-            audioAnalysisGlobal.lastLogTime = Math.trunc(eventData.currentTime); 
         }
 
         return events;
